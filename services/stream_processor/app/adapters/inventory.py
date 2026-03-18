@@ -1,11 +1,12 @@
 """Mock inventory allocation adapter — reserves stock for order items."""
 
-import logging
 import uuid as _uuid
+
+import structlog
 
 from app.db import create_inventory_reservation
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class Reservation:
@@ -31,6 +32,6 @@ async def allocate_inventory(order_id: str, items: list[dict]) -> list[Reservati
             sku=item["sku"],
             quantity=item["quantity"],
         ))
-        logger.info("Reserved %d × %s for order %s", item["quantity"], item["sku"], order_id)
+        logger.info("inventory_reserved", order_id=order_id, sku=item["sku"], quantity=item["quantity"])
 
     return reservations

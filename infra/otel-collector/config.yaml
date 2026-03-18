@@ -10,6 +10,11 @@ processors:
   batch:
     timeout: 5s
     send_batch_size: 1024
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: dev
+        action: upsert
 
 exporters:
   otlphttp/tempo:
@@ -17,21 +22,23 @@ exporters:
 
   prometheusremotewrite:
     endpoint: http://prometheus:9090/api/v1/write
+    resource_to_telemetry_conversion:
+      enabled: true
 
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [batch, resource]
       exporters: [otlphttp/tempo]
     metrics:
       receivers: [otlp]
-      processors: [batch]
+      processors: [batch, resource]
       exporters: [prometheusremotewrite]
     logs:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [loki]
+      processors: [batch, resource]
+      exporters: [otlphttp/loki]

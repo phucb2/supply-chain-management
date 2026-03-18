@@ -1,11 +1,12 @@
 """Mock carrier adapter — simulates shipment label creation."""
 
 import asyncio
-import logging
 import random
 import uuid
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger()
 
 CARRIERS = ["FedEx", "UPS", "DHL", "USPS"]
 
@@ -25,7 +26,7 @@ async def create_shipment(order_id: str, items: list[dict]) -> ShipmentResult:
     tracking_number = f"{carrier[:3].upper()}-{uuid.uuid4().hex[:10].upper()}"
     label_url = f"https://labels.example.com/{tracking_number}.pdf"
 
-    logger.info("Shipment created for order %s: %s via %s", order_id, tracking_number, carrier)
+    logger.info("carrier_shipment_created", order_id=order_id, tracking_number=tracking_number, carrier=carrier)
 
     return ShipmentResult(
         tracking_number=tracking_number,

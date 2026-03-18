@@ -1,0 +1,9 @@
+[project]
+name = "observability"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-exporter-otlp>=1.28",
+    "structlog>=24.4",
+]

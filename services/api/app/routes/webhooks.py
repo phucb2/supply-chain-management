@@ -1,8 +1,8 @@
 """Webhook endpoints — CRUD subscriptions and inbound receiver."""
 
-import logging
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +12,7 @@ from app.kafka.producer import publish_event
 from app.models.schemas import WebhookSubscription
 from app.storage import upload_raw_payload
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -51,7 +51,7 @@ async def receive_webhook(request: Request, session: AsyncSession = Depends(get_
     try:
         upload_raw_payload(f"webhook-{reference_id}", payload)
     except Exception:
-        logger.exception("MinIO upload failed (non-fatal)")
+        logger.exception("minio_upload_failed", reference_id=reference_id)
 
     topic_map = {
         "shipment.status_updated": "shipment.status-updated",

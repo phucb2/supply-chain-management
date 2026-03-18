@@ -3,13 +3,13 @@
 import hashlib
 import hmac
 import json
-import logging
 
 import httpx
+import structlog
 
 from app.db import get_webhook_subscriptions_for_event
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 TIMEOUT_SECONDS = 10
 
@@ -19,7 +19,7 @@ async def dispatch_webhooks(event_type: str, payload: dict) -> None:
     try:
         subscriptions = await get_webhook_subscriptions_for_event(event_type)
     except Exception:
-        logger.exception("Failed to query webhook subscriptions")
+        logger.exception("webhook_subscription_query_failed")
         return
 
     if not subscriptions:
@@ -36,9 +36,6 @@ async def dispatch_webhooks(event_type: str, payload: dict) -> None:
                     headers["X-Webhook-Signature"] = sig
 
                 resp = await client.post(sub.url, content=body, headers=headers)
-                logger.info(
-                    "Webhook delivered to %s (status=%d) for event %s",
-                    sub.url, resp.status_code, event_type,
-                )
+                logger.info("webhook_delivered", url=sub.url, status_code=resp.status_code, event_type=event_type)
             except Exception:
-                logger.exception("Webhook delivery failed to %s for event %s", sub.url, event_type)
+                logger.exception("webhook_delivery_failed", url=sub.url, event_type=event_type)

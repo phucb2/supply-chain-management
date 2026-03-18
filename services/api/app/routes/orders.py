@@ -1,8 +1,8 @@
 """Order endpoints — import, read, list, cancel."""
 
-import logging
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +17,9 @@ from app.db.session import get_session
 from app.kafka.producer import publish_event
 from app.models.schemas import OrderCreate, OrderResponse, OrderStatus
 from app.storage import upload_raw_payload
+from observability import orders_received
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -56,10 +57,12 @@ async def import_order(body: OrderCreate, session: AsyncSession = Depends(get_se
         },
     )
 
+    orders_received.add(1, {"channel": body.channel})
+
     try:
         upload_raw_payload(str(order.id), body.model_dump(mode="json"))
     except Exception:
-        logger.exception("MinIO upload failed (non-fatal)")
+        logger.exception("minio_upload_failed", order_id=str(order.id))
 
     return order
 

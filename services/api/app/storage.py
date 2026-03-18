@@ -1,15 +1,15 @@
 """MinIO storage — archive raw order payloads."""
 
 import json
-import logging
 from datetime import datetime, timezone
 from io import BytesIO
 
+import structlog
 from minio import Minio
 
 from app.config import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _client: Minio | None = None
 
@@ -42,8 +42,8 @@ def upload_raw_payload(order_id: str, payload: dict) -> str | None:
             length=len(data),
             content_type="application/json",
         )
-        logger.info("Archived payload to %s/%s", BUCKET, object_name)
+        logger.info("payload_archived", bucket=BUCKET, object_name=object_name)
         return object_name
     except Exception:
-        logger.exception("Failed to archive payload for order %s", order_id)
+        logger.exception("payload_archive_failed", order_id=order_id)
         return None

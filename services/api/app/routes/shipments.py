@@ -1,9 +1,9 @@
 """Shipment endpoints — get, tracking, status update."""
 
-import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +12,7 @@ from app.db.session import get_session
 from app.kafka.producer import publish_event
 from app.models.schemas import ShipmentResponse, TrackingEvent
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 router = APIRouter()
 

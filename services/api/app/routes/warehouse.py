@@ -1,8 +1,8 @@
 """Warehouse endpoints — goods movements, inventory, driver management."""
 
-import logging
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,7 @@ from app.db.session import get_session
 from app.kafka.producer import publish_event
 from app.models.schemas import DriverCreate, GoodsMovement
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 router = APIRouter()
 

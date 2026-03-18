@@ -5,10 +5,8 @@ asyncpg>=0.30
 pydantic>=2.10
 pydantic-settings>=2.6
 httpx>=0.28
-structlog>=24.4
 
-opentelemetry-sdk>=1.28
-opentelemetry-exporter-otlp>=1.28
+-e /libs/observability
 
 pytest>=8.3
 pytest-asyncio>=0.24

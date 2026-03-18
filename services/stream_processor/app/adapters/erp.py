@@ -1,11 +1,12 @@
 """Mock ERP adapter — simulates order creation in an external ERP system."""
 
 import asyncio
-import logging
 import random
 import uuid
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger()
 
 SUCCESS_RATE = 0.95
 MIN_LATENCY_MS = 200
@@ -26,8 +27,8 @@ async def create_erp_order(order_id: str, external_order_id: str, items: list[di
 
     if random.random() <= SUCCESS_RATE:
         erp_order_id = f"ERP-{uuid.uuid4().hex[:8].upper()}"
-        logger.info("ERP order created: %s → %s (%.0fms)", order_id, erp_order_id, latency * 1000)
+        logger.info("erp_order_created", order_id=order_id, erp_order_id=erp_order_id, latency_ms=round(latency * 1000))
         return ERPResponse(success=True, erp_order_id=erp_order_id)
     else:
-        logger.warning("ERP order creation failed for %s (simulated)", order_id)
+        logger.warning("erp_order_failed", order_id=order_id, reason="simulated failure")
         return ERPResponse(success=False, error="ERP system unavailable (simulated failure)")

@@ -1,11 +1,11 @@
 import json
-import logging
 
+import structlog
 from confluent_kafka import Producer
 
 from app.config import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _producer: Producer | None = None
 
@@ -23,9 +23,9 @@ def get_producer() -> Producer:
 
 def _delivery_callback(err, msg):
     if err:
-        logger.error("Kafka delivery failed: %s", err)
+        logger.error("kafka_delivery_failed", error=str(err))
     else:
-        logger.debug("Delivered to %s [%d] @ %d", msg.topic(), msg.partition(), msg.offset())
+        logger.debug("kafka_delivered", topic=msg.topic(), partition=msg.partition(), offset=msg.offset())
 
 
 def publish_event(topic: str, key: str, value: dict) -> None:
