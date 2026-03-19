@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_service_name: str = "stream-processor"
 
+    mlflow_tracking_uri: str = "http://localhost:5001"
+    mlflow_s3_endpoint_url: str = "http://localhost:9000"
+
     @property
     def database_url(self) -> str:
         return (

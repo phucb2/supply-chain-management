@@ -88,6 +88,7 @@ class Shipment(Base):
     )
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
 
     order = relationship("Order", back_populates="shipments")
     packages = relationship("ShipmentPackage", back_populates="shipment", cascade="all, delete-orphan")
@@ -154,3 +155,25 @@ class WebhookSubscription(Base):
     secret = Column(String, nullable=True)
     active = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class Prediction(Base):
+    __tablename__ = "predictions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    shipment_id = Column(UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=False)
+    predicted_eta_hours = Column(Float, nullable=False)
+    model_version = Column(String, nullable=False)
+    input_features = Column(JSONB, nullable=True)
+    predicted_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class PredictionActual(Base):
+    __tablename__ = "prediction_actuals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    shipment_id = Column(UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=False)
+    prediction_id = Column(UUID(as_uuid=True), ForeignKey("predictions.id"), nullable=False)
+    actual_eta_hours = Column(Float, nullable=False)
+    absolute_error = Column(Float, nullable=False)
+    recorded_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

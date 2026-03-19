@@ -126,6 +126,43 @@ services:
     volumes:
       - ./scripts/init-buckets.sh:/tmp/init-buckets.sh
 
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.18.0
+    container_name: mlflow
+    ports:
+      - "5001:5001"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin_secret}
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq libgomp1 && pip install --quiet psycopg2-binary boto3 lightgbm scikit-learn pandas numpy && mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri postgresql://${POSTGRES_USER:-supplychain}:${POSTGRES_PASSWORD:-supplychain_secret}@postgresql:5432/${POSTGRES_DB:-supplychain} --default-artifact-root s3://ml-artifacts/"]
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mlflow-init:
+    image: ghcr.io/mlflow/mlflow:v2.18.0
+    container_name: mlflow-init
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin_secret}
+    command: ["bash", "-c", "pip install --quiet lightgbm boto3 && python /tmp/init-mlflow-model.py"]
+    volumes:
+      - ./scripts/init-mlflow-model.py:/tmp/init-mlflow-model.py
+      - ./infra/mlflow/default-model:/tmp/default-model
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
   # ---------------------------------------------------------------------------
   # Observability
   # ---------------------------------------------------------------------------
@@ -229,11 +266,26 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+      mlflow-init:
+        condition: service_completed_successfully
+
+  test-ui:
+    build: services/test-ui
+    container_name: test-ui
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE_URL: http://api:8000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-supplychain}:${POSTGRES_PASSWORD:-supplychain_secret}@postgresql:5432/${POSTGRES_DB:-supplychain}"
+    depends_on:
+      - api
+      - postgresql
 
 volumes:
   kafka-data:
   postgres-data:
   minio-data:
+  mlflow-data:
   prometheus-data:
   loki-data:
   tempo-data:

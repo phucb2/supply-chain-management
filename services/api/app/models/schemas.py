@@ -75,6 +75,7 @@ class ShipmentResponse(BaseModel):
     status: ShipmentStatus
     created_at: datetime
     updated_at: datetime
+    delivered_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

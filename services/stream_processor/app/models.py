@@ -39,3 +39,17 @@ class OrderException(faust.Record):
     order_id: str
     reason: str
     original_event: str | None = None
+
+
+class ShipmentCreated(faust.Record):
+    order_id: str
+    shipment_id: str
+    carrier: str
+    tracking_number: str
+
+
+class EtaPredicted(faust.Record):
+    shipment_id: str
+    predicted_eta_hours: float
+    model_version: str
+    predicted_at: str

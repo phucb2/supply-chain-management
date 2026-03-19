@@ -13,4 +13,4 @@ app = faust.App(
     loghandlers=[otel_handler],
 )
 
-from app.agents import order_pipeline, shipment_tracker  # noqa: E402, F401
+from app.agents import eta_predictor, order_pipeline, shipment_tracker  # noqa: E402, F401

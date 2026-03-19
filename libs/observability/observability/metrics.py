@@ -39,3 +39,18 @@ pipeline_duration = meter.create_histogram(
     description="End-to-end order pipeline duration",
     unit="ms",
 )
+
+# ML metrics
+ml_predictions_total = meter.create_counter(
+    "ml.predictions.total", description="ETA predictions made",
+)
+ml_prediction_latency = meter.create_histogram(
+    "ml.prediction.latency_seconds",
+    description="Model inference latency",
+    unit="s",
+)
+ml_prediction_error = meter.create_histogram(
+    "ml.prediction.error_hours",
+    description="Prediction absolute error vs actual",
+    unit="h",
+)

@@ -57,16 +57,15 @@ Steps:
 
 Features used:
 
-| Feature                 | Source                | Type        |
-| ----------------------- | --------------------- | ----------- |
-| `carrier_id`            | shipment record       | categorical |
-| `origin_warehouse_id`   | shipment record       | categorical |
-| `destination_region`    | shipment record       | categorical |
-| `total_weight_kg`       | order                 | numeric     |
-| `item_count`            | order                 | numeric     |
-| `day_of_week`           | shipment created_at   | numeric     |
-| `hour_of_day`           | shipment created_at   | numeric     |
-| **`actual_eta_hours`**  | computed (delivered_at - shipped_at) | **label** |
+| Feature                 | Source                              | Type        |
+| ----------------------- | ----------------------------------- | ----------- |
+| `carrier`               | shipments.carrier                   | categorical |
+| `channel`               | orders.channel                      | categorical |
+| `item_count`            | COUNT(order_items)                  | numeric     |
+| `total_weight_kg`       | SUM(shipment_packages.weight)       | numeric     |
+| `day_of_week`           | shipments.created_at                | numeric     |
+| `hour_of_day`           | shipments.created_at                | numeric     |
+| **`actual_eta_hours`**  | computed (delivered_at - created_at) | **label** |
 
 Why LightGBM / scikit-learn:
 

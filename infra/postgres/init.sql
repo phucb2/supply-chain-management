@@ -57,7 +57,8 @@ CREATE TABLE shipments (
     tracking_number TEXT,
     status          shipment_status NOT NULL DEFAULT 'requested',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    delivered_at    TIMESTAMPTZ
 );
 
 -- Shipment packages
@@ -111,4 +112,24 @@ CREATE TABLE webhook_subscriptions (
     secret      TEXT,
     active      INTEGER NOT NULL DEFAULT 1,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ML: ETA predictions
+CREATE TABLE predictions (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shipment_id         UUID NOT NULL REFERENCES shipments(id),
+    predicted_eta_hours DOUBLE PRECISION NOT NULL,
+    model_version       TEXT NOT NULL,
+    input_features      JSONB,
+    predicted_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ML: prediction vs actual comparison (feedback loop)
+CREATE TABLE prediction_actuals (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shipment_id         UUID NOT NULL REFERENCES shipments(id),
+    prediction_id       UUID NOT NULL REFERENCES predictions(id),
+    actual_eta_hours    DOUBLE PRECISION NOT NULL,
+    absolute_error      DOUBLE PRECISION NOT NULL,
+    recorded_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );

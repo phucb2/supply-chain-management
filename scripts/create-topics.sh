@@ -17,6 +17,7 @@ TOPICS=(
   "shipment.requested"
   "shipment.created"
   "shipment.status-updated"
+  "eta.predicted"
   "dlq.order.received"
   "dlq.order.validated"
   "dlq.shipment.status-updated"

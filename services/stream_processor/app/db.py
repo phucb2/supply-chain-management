@@ -75,6 +75,7 @@ class Shipment(Base):
     )
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
     packages = relationship("ShipmentPackage", back_populates="shipment")
 
 
@@ -109,6 +110,26 @@ class WebhookSubscription(Base):
     secret = Column(String, nullable=True)
     active = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class Prediction(Base):
+    __tablename__ = "predictions"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    shipment_id = Column(UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=False)
+    predicted_eta_hours = Column(Float, nullable=False)
+    model_version = Column(String, nullable=False)
+    input_features = Column(JSONB, nullable=True)
+    predicted_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class PredictionActual(Base):
+    __tablename__ = "prediction_actuals"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    shipment_id = Column(UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=False)
+    prediction_id = Column(UUID(as_uuid=True), ForeignKey("predictions.id"), nullable=False)
+    actual_eta_hours = Column(Float, nullable=False)
+    absolute_error = Column(Float, nullable=False)
+    recorded_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 # ── Query helpers ────────────────────────────────────────────────────────────
@@ -203,3 +224,81 @@ async def get_webhook_subscriptions_for_event(event_type: str) -> list[WebhookSu
         )
         all_subs = list(result.scalars().all())
         return [s for s in all_subs if event_type in s.events]
+
+
+# ── ML query helpers ─────────────────────────────────────────────────────────
+
+async def save_prediction(
+    *,
+    shipment_id: uuid.UUID,
+    predicted_eta_hours: float,
+    model_version: str,
+    input_features: dict | None = None,
+) -> Prediction:
+    async with async_session() as session:
+        prediction = Prediction(
+            shipment_id=shipment_id,
+            predicted_eta_hours=predicted_eta_hours,
+            model_version=model_version,
+            input_features=input_features,
+        )
+        session.add(prediction)
+        await session.commit()
+        await session.refresh(prediction)
+        return prediction
+
+
+async def get_prediction_for_shipment(shipment_id: uuid.UUID) -> Prediction | None:
+    async with async_session() as session:
+        result = await session.execute(
+            select(Prediction)
+            .where(Prediction.shipment_id == shipment_id)
+            .order_by(Prediction.predicted_at.desc())
+        )
+        return result.scalar_one_or_none()
+
+
+async def save_prediction_actual(
+    *,
+    shipment_id: uuid.UUID,
+    prediction_id: uuid.UUID,
+    actual_eta_hours: float,
+    absolute_error: float,
+) -> PredictionActual:
+    async with async_session() as session:
+        actual = PredictionActual(
+            shipment_id=shipment_id,
+            prediction_id=prediction_id,
+            actual_eta_hours=actual_eta_hours,
+            absolute_error=absolute_error,
+        )
+        session.add(actual)
+        await session.commit()
+        await session.refresh(actual)
+        return actual
+
+
+async def set_shipment_delivered_at(shipment_id: uuid.UUID, delivered_at: datetime) -> None:
+    async with async_session() as session:
+        await session.execute(
+            update(Shipment)
+            .where(Shipment.id == shipment_id)
+            .values(delivered_at=delivered_at)
+        )
+        await session.commit()
+
+
+async def get_shipment_with_order(shipment_id: uuid.UUID) -> tuple[Shipment | None, Order | None]:
+    """Fetch a shipment and its parent order in one round-trip."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(Shipment).options(selectinload(Shipment.packages)).where(Shipment.id == shipment_id)
+        )
+        shipment = result.scalar_one_or_none()
+        if shipment is None:
+            return None, None
+        order_result = await session.execute(
+            select(Order).options(selectinload(Order.items)).where(Order.id == shipment.order_id)
+        )
+        order = order_result.scalar_one_or_none()
+        return shipment, order
