@@ -18,6 +18,7 @@ TOPICS=(
   "shipment.created"
   "shipment.status-updated"
   "eta.predicted"
+  "benchmark.e2e"
   "dlq.order.received"
   "dlq.order.validated"
   "dlq.shipment.status-updated"

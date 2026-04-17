@@ -29,6 +29,33 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mqtt:
+    image: emqx/emqx:5.8.3
+    container_name: mqtt
+    ports:
+      - "1883:1883"
+      - "18083:18083"
+    healthcheck:
+      test: emqx ctl status
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   kafka-init:
     image: confluentinc/cp-kafka:7.7.1
     depends_on:
