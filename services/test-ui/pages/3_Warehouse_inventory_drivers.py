@@ -3,6 +3,7 @@ Warehouse — goods-in/out, inventory overview, driver management.
 """
 
 import os
+from uuid import UUID
 
 import streamlit as st
 
@@ -88,24 +89,37 @@ with tab_drivers:
     with st.form("add_driver_form"):
         st.markdown("**Register a New Driver**")
         dc1, dc2 = st.columns(2)
-        d_name = dc1.text_input("Name")
-        d_phone = dc2.text_input("Phone (optional)")
-        dc3, dc4 = st.columns(2)
-        d_vendor = dc3.text_input("Vendor / Company (optional)")
-        d_plate = dc4.text_input("Vehicle Plate (optional)")
+        d_name = dc1.text_input("Full name")
+        d_license = dc2.text_input("License number")
+        d_phone = st.text_input("Phone (optional)")
+        d_vendor_id = st.text_input("Vendor ID — UUID only (optional)", placeholder="00000000-0000-0000-0000-000000000000")
         d_sub = st.form_submit_button("Add Driver", type="primary", use_container_width=True)
 
     if d_sub:
-        if not d_name:
-            st.error("Driver name is required.")
+        if not d_name or not d_license:
+            st.error("Full name and license number are required.")
         else:
-            code, body = api.create_driver(base, d_name, d_phone or None, d_vendor or None, d_plate or None)
-            if code == 201:
-                st.success(f"Driver created: **{body.get('name', d_name)}** — ID: `{body['id']}`")
-            else:
-                st.error(f"Failed ({code})")
-                if isinstance(body, dict):
-                    st.json(body)
+            vid: str | None = None
+            if d_vendor_id and d_vendor_id.strip():
+                try:
+                    vid = str(UUID(d_vendor_id.strip()))
+                except ValueError:
+                    st.error("Vendor ID must be a valid UUID.")
+                    vid = "__invalid__"
+            if vid != "__invalid__":
+                code, body = api.create_driver(
+                    base,
+                    d_name.strip(),
+                    d_license.strip(),
+                    d_phone.strip() or None,
+                    vid,
+                )
+                if code == 201:
+                    st.success(f"Driver created: **{body.get('name', d_name)}** — ID: `{body['id']}`")
+                else:
+                    st.error(f"Failed ({code})")
+                    if isinstance(body, dict):
+                        st.json(body)
 
     st.divider()
     st.markdown("**Remove a Driver**")

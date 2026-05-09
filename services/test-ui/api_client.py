@@ -92,15 +92,22 @@ def list_inventory(base: str) -> tuple[int, list]:
     return _req("get", base, "/warehouse/inventory")
 
 
-def create_driver(base: str, name: str, phone: str | None = None,
-                  vendor: str | None = None, plate: str | None = None) -> tuple[int, dict]:
-    body: dict = {"name": name}
+def create_driver(
+    base: str,
+    full_name: str,
+    license_number: str,
+    phone: str | None = None,
+    vendor_id: str | None = None,
+) -> tuple[int, dict]:
+    """POST /warehouse/drivers — body matches API DriverCreate schema."""
+    body: dict = {
+        "full_name": full_name,
+        "license_number": license_number,
+    }
     if phone:
         body["phone"] = phone
-    if vendor:
-        body["vendor"] = vendor
-    if plate:
-        body["vehicle_plate"] = plate
+    if vendor_id:
+        body["vendor_id"] = vendor_id
     return _req("post", base, "/warehouse/drivers", json=body)
 
 

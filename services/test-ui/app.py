@@ -12,6 +12,14 @@ import asyncpg
 import streamlit as st
 
 import api_client as api
+from sidebar_ui import (
+    inject_sidebar_styles,
+    sidebar_api_status,
+    sidebar_brand,
+    sidebar_connection_hint,
+    sidebar_section_actions,
+    sidebar_section_backend,
+)
 
 DB_DSN = os.getenv(
     "DATABASE_URL",
@@ -20,6 +28,7 @@ DB_DSN = os.getenv(
 API_BASE_DEFAULT = os.getenv("API_BASE_URL", "http://api:8000")
 
 st.set_page_config(page_title="Supply Chain Demo", page_icon=":package:", layout="wide")
+inject_sidebar_styles()
 
 
 def _run_query(sql, *args):
@@ -50,14 +59,15 @@ if "api_base" not in st.session_state:
     st.session_state.api_base = API_BASE_DEFAULT
 
 with st.sidebar:
-    st.text_input("API Base URL", key="api_base")
+    sidebar_brand(page_title="Order lifecycle demo", tag="Supply chain · console")
+    sidebar_section_backend()
+    sidebar_connection_hint()
+    st.text_input("API base URL", key="api_base", placeholder="http://localhost:8000")
     base = st.session_state.api_base
     health_status, _ = api.health_check(base)
-    if health_status == 200:
-        st.success("API connected")
-    else:
-        st.error("API unreachable")
-    if st.button(":arrows_counterclockwise: Reset Demo", use_container_width=True):
+    sidebar_api_status(connected=health_status == 200)
+    sidebar_section_actions()
+    if st.button("Reset demo", use_container_width=True, help="Clear order, shipment, and step state"):
         st.session_state.demo = dict(_DEMO_INIT)
         st.rerun()
 
