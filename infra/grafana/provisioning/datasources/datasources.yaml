@@ -29,3 +29,18 @@ datasources:
       tracesToLogs:
         datasourceUid: loki
         tags: ["service.name"]
+
+  - name: Supply Chain DW
+    type: postgres
+    uid: postgres-dw
+    access: proxy
+    url: postgresql:5432
+    user: supplychain
+    isDefault: false
+    jsonData:
+      database: supplychain
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: supplychain_secret

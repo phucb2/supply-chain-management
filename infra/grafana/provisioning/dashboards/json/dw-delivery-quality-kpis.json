@@ -1,0 +1,243 @@
+{
+  "uid": "dw-delivery-quality-kpis",
+  "title": "DW — Delivery quality KPIs",
+  "tags": ["supply-chain", "dwh", "dw", "kpi"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "hidden": true },
+  "templating": {
+    "list": [
+      {
+        "name": "reporting_month",
+        "type": "query",
+        "label": "Order cohort month",
+        "datasource": { "type": "postgres", "uid": "postgres-dw" },
+        "refresh": 1,
+        "regex": "",
+        "sort": 2,
+        "multi": false,
+        "includeAll": false,
+        "query": "SELECT year_month FROM ( SELECT DISTINCT year_month FROM dw.dim_date UNION SELECT to_char(CURRENT_DATE, 'YYYY-MM') AS year_month ) t ORDER BY year_month DESC",
+        "definition": "SELECT year_month FROM ( SELECT DISTINCT year_month FROM dw.dim_date UNION SELECT to_char(CURRENT_DATE, 'YYYY-MM') AS year_month ) t ORDER BY year_month DESC",
+        "current": { "selected": true, "text": "", "value": "" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Delivery quality (fact_delivery_quality)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 1 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Batch DW metrics** from schema `dw`, aligned with assignment Table 4. Filter uses **order date** month (`dim_date.year_month`). Run `scripts/load_delivery_quality_dw.sql` or `scripts/run_dw_etl.ps1` / `run_dw_etl.sh` first; see `DWH.md`. Datasource: **Supply Chain DW** (PostgreSQL)."
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Total orders (cohort)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_not_yet_delivered, f.is_on_time, f.is_late_under_1_week, f.is_late_under_2_weeks, f.is_late_over_2_weeks FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ) SELECT COALESCE(SUM( is_not_yet_delivered + is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks ), 0)::integer AS value FROM scoped",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "On-time delivery rate",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_not_yet_delivered, f.is_on_time, f.is_late_under_1_week, f.is_late_under_2_weeks, f.is_late_over_2_weeks FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ), agg AS ( SELECT SUM(is_on_time) AS num, SUM( is_not_yet_delivered + is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks ) AS denom FROM scoped ) SELECT CASE WHEN denom IS NULL OR denom = 0 THEN NULL ELSE (num::double precision / denom::double precision) END AS value FROM agg",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.85 }, { "color": "green", "value": 0.95 }] }
+        }
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Not yet delivered",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_not_yet_delivered FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ) SELECT COALESCE(SUM(is_not_yet_delivered), 0)::integer AS value FROM scoped",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] }
+        }
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Delivered (any bucket)",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_on_time, f.is_late_under_1_week, f.is_late_under_2_weeks, f.is_late_over_2_weeks FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ) SELECT COALESCE(SUM( is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks ), 0)::integer AS value FROM scoped",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "Late shipment rates (share of cohort)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Late ≤ 1 week (rate)",
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 10 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_not_yet_delivered, f.is_on_time, f.is_late_under_1_week, f.is_late_under_2_weeks, f.is_late_over_2_weeks FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ), agg AS ( SELECT SUM(is_late_under_1_week) AS num, SUM( is_not_yet_delivered + is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks ) AS denom FROM scoped ) SELECT CASE WHEN denom IS NULL OR denom = 0 THEN NULL ELSE (num::double precision / denom::double precision) END AS value FROM agg",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2 } },
+      "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Late 8–14 days (rate)",
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 10 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_not_yet_delivered, f.is_on_time, f.is_late_under_1_week, f.is_late_under_2_weeks, f.is_late_over_2_weeks FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ), agg AS ( SELECT SUM(is_late_under_2_weeks) AS num, SUM( is_not_yet_delivered + is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks ) AS denom FROM scoped ) SELECT CASE WHEN denom IS NULL OR denom = 0 THEN NULL ELSE (num::double precision / denom::double precision) END AS value FROM agg",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2 } },
+      "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Late > 14 days (rate)",
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 10 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_not_yet_delivered, f.is_on_time, f.is_late_under_1_week, f.is_late_under_2_weeks, f.is_late_over_2_weeks FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ), agg AS ( SELECT SUM(is_late_over_2_weeks) AS num, SUM( is_not_yet_delivered + is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks ) AS denom FROM scoped ) SELECT CASE WHEN denom IS NULL OR denom = 0 THEN NULL ELSE (num::double precision / denom::double precision) END AS value FROM agg",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2 } },
+      "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "KPI summary row",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "postgres-dw" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-dw" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS ( SELECT f.is_not_yet_delivered, f.is_on_time, f.is_late_under_1_week, f.is_late_under_2_weeks, f.is_late_over_2_weeks FROM dw.fact_delivery_quality f JOIN dw.dim_date dd ON dd.date_key = f.order_date_key WHERE dd.year_month = '${reporting_month}' ), agg AS ( SELECT SUM(is_not_yet_delivered + is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks) AS total_orders, SUM(is_on_time + is_late_under_1_week + is_late_under_2_weeks + is_late_over_2_weeks) AS delivery_successful, SUM(is_not_yet_delivered) AS not_yet_delivered, SUM(is_on_time) AS on_time_count, SUM(is_late_under_1_week) AS late_1w, SUM(is_late_under_2_weeks) AS late_2w, SUM(is_late_over_2_weeks) AS late_2wp FROM scoped ) SELECT '${reporting_month}'::text AS reporting_month, agg.total_orders::integer, agg.delivery_successful::integer, agg.not_yet_delivered::integer, CASE WHEN agg.total_orders IS NULL OR agg.total_orders = 0 THEN NULL ELSE ROUND((agg.on_time_count::numeric / agg.total_orders::numeric), 4) END AS on_time_delivery_rate, CASE WHEN agg.total_orders IS NULL OR agg.total_orders = 0 THEN NULL ELSE ROUND((agg.late_1w::numeric / agg.total_orders::numeric), 4) END AS late_under_1_week_rate, CASE WHEN agg.total_orders IS NULL OR agg.total_orders = 0 THEN NULL ELSE ROUND((agg.late_2w::numeric / agg.total_orders::numeric), 4) END AS late_under_2_weeks_rate, CASE WHEN agg.total_orders IS NULL OR agg.total_orders = 0 THEN NULL ELSE ROUND((agg.late_2wp::numeric / agg.total_orders::numeric), 4) END AS late_over_2_weeks_rate FROM agg",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "on_time_delivery_rate" }, "properties": [{ "id": "unit", "value": "percentunit" }] },
+          { "matcher": { "id": "byName", "options": "late_under_1_week_rate" }, "properties": [{ "id": "unit", "value": "percentunit" }] },
+          { "matcher": { "id": "byName", "options": "late_under_2_weeks_rate" }, "properties": [{ "id": "unit", "value": "percentunit" }] },
+          { "matcher": { "id": "byName", "options": "late_over_2_weeks_rate" }, "properties": [{ "id": "unit", "value": "percentunit" }] }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm" }
+    }
+  ]
+}

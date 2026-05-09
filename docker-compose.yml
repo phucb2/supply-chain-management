@@ -177,6 +177,7 @@ services:
       DEBEZIUM_DB_PASSWORD: ${DEBEZIUM_DB_PASSWORD:-debezium_secret}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # DW ETL (host): scripts/run_dw_etl.ps1 or run_dw_etl.sh — loads dw.* from public sale_orders / sale_order_status
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./infra/postgres/init-debezium-user.sh:/docker-entrypoint-initdb.d/02-debezium-user.sh
       - ./infra/postgres/03-debezium-publication.sql:/docker-entrypoint-initdb.d/03-debezium-publication.sql
@@ -316,9 +317,14 @@ services:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning
       - grafana-data:/var/lib/grafana
     depends_on:
-      - prometheus
-      - loki
-      - tempo
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+      postgresql:
+        condition: service_healthy
 
   # ---------------------------------------------------------------------------
   # Application
