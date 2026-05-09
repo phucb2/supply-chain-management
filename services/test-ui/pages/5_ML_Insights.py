@@ -40,19 +40,20 @@ with tab_browse:
         pass
 
     rows = _run_query(
-        "SELECT p.shipment_id, p.predicted_eta_hours, p.model_version, p.predicted_at, "
-        "       s.carrier, s.status as ship_status "
+        "SELECT p.delivery_order_id, p.predicted_eta_hours, p.model_version, p.predicted_at, "
+        "       d.status AS delivery_status, so.external_order_id "
         "FROM predictions p "
-        "JOIN shipments s ON s.id = p.shipment_id "
+        "JOIN delivery_orders d ON d.delivery_order_id = p.delivery_order_id "
+        "JOIN sale_orders so ON so.sale_order_id = p.sale_order_id "
         "ORDER BY p.predicted_at DESC LIMIT 50"
     )
 
     if rows:
         data = [
             {
-                "Shipment": str(r["shipment_id"])[:8] + "...",
-                "Carrier": r["carrier"] or "---",
-                "Ship Status": r["ship_status"],
+                "Delivery Order": str(r["delivery_order_id"])[:8] + "...",
+                "External Order": r["external_order_id"],
+                "Delivery Status": r["delivery_status"],
                 "Predicted ETA (h)": round(r["predicted_eta_hours"], 1),
                 "Model": r["model_version"],
                 "Predicted At": str(r["predicted_at"])[:19],
@@ -74,19 +75,18 @@ with tab_accuracy:
         pass
 
     actuals = _run_query(
-        "SELECT pa.shipment_id, p.predicted_eta_hours, pa.actual_eta_hours, "
-        "       pa.absolute_error, pa.recorded_at, s.carrier "
+        "SELECT pa.sale_order_id, p.delivery_order_id, p.predicted_eta_hours, pa.actual_eta_hours, "
+        "       pa.absolute_error, pa.recorded_at "
         "FROM prediction_actuals pa "
         "JOIN predictions p ON p.id = pa.prediction_id "
-        "JOIN shipments s ON s.id = pa.shipment_id "
         "ORDER BY pa.recorded_at DESC LIMIT 50"
     )
 
     if actuals:
         data = [
             {
-                "Shipment": str(r["shipment_id"])[:8] + "...",
-                "Carrier": r["carrier"] or "---",
+                "Sale Order": str(r["sale_order_id"])[:8] + "...",
+                "Delivery Order": str(r["delivery_order_id"])[:8] + "...",
                 "Predicted (h)": round(r["predicted_eta_hours"], 1),
                 "Actual (h)": round(r["actual_eta_hours"], 2),
                 "Error (h)": round(r["absolute_error"], 2),

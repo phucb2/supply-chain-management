@@ -90,7 +90,7 @@ async def _run_pipeline(event: OrderReceived):
             })
             return
 
-        if order.status not in ("received",):
+        if order.status not in ("pending",):
             logger.info("order_skipped", order_id=order_id, status=order.status, step="validate")
             return
 
@@ -103,7 +103,7 @@ async def _run_pipeline(event: OrderReceived):
             })
             return
 
-        await update_order_status(oid, "validated")
+        await update_order_status(oid, "confirmed")
         await order_validated_topic.send(value={
             "order_id": order_id, "external_order_id": event.external_order_id,
         })
@@ -122,7 +122,7 @@ async def _run_pipeline(event: OrderReceived):
             logger.error("erp_sync_failed", order_id=order_id, error=erp_result.error, step="erp_sync")
             return
 
-        await update_order_status(oid, "erp_synced")
+        await update_order_status(oid, "confirmed")
         await create_order_event(oid, "order.erp.created", {"erp_order_id": erp_result.erp_order_id})
         await order_erp_created_topic.send(value={
             "order_id": order_id, "erp_order_id": erp_result.erp_order_id,
@@ -149,10 +149,10 @@ async def _run_pipeline(event: OrderReceived):
             label_url=carrier_result.label_url,
         )
 
-        await update_order_status(oid, "shipped")
+        await update_order_status(oid, "in_transit")
         await shipment_created_topic.send(value={
             "order_id": order_id,
-            "shipment_id": str(shipment.id),
+            "delivery_order_id": str(shipment.delivery_order_id),
             "carrier": carrier_result.carrier,
             "tracking_number": carrier_result.tracking_number,
         })
@@ -161,7 +161,7 @@ async def _run_pipeline(event: OrderReceived):
         logger.info(
             "order_shipped",
             order_id=order_id,
-            shipment_id=str(shipment.id),
+            shipment_id=str(shipment.delivery_order_id),
             carrier=carrier_result.carrier,
             step="ship",
         )

@@ -7,6 +7,7 @@ Or from host (change BASE / KSQLDB_URL to localhost).
 import json
 import sys
 import time
+from datetime import date
 
 import httpx
 
@@ -129,13 +130,16 @@ section("Scenario 3: Order flows into ksqlDB stream")
 
 order_payload = {
     "external_order_id": f"KSQL-TEST-{TS}",
-    "channel": "ksql-test",
+    "source": "ksql-test",
+    "customer_category": "b2c",
     "customer_name": "KsqlDB Tester",
     "customer_email": "ksql@test.com",
     "shipping_address": "42 Stream Ave, Kafkaville",
+    "destination": "Kafkaville",
+    "req_delivery_date": date.today().isoformat(),
     "items": [
-        {"sku": "KSQL-ITEM-1", "product_name": "Stream Widget", "quantity": 3, "unit_price": 19.99},
-        {"sku": "KSQL-ITEM-2", "product_name": "Table Widget", "quantity": 1, "unit_price": 49.99},
+        {"sku": "KSQL-ITEM-1", "product_name": "Stream Widget", "quantity": 3, "unit_price": 19.99, "weight_per_unit_kg": 1.0},
+        {"sku": "KSQL-ITEM-2", "product_name": "Table Widget", "quantity": 1, "unit_price": 49.99, "weight_per_unit_kg": 1.0},
     ],
 }
 
@@ -143,7 +147,7 @@ print("\n  Creating order via API...")
 r = httpx.post(f"{API_BASE}/orders/import", json=order_payload)
 report("3.1  POST /orders/import → 201", r.status_code == 201, f"status={r.status_code}")
 order = r.json()
-order_id = order["id"]
+order_id = order["sale_order_id"]
 print(f"       Order ID: {order_id}")
 
 print("\n  Waiting for event to reach Kafka...")
@@ -172,10 +176,10 @@ final_status = ""
 while time.time() < deadline:
     r = httpx.get(f"{API_BASE}/orders/{order_id}")
     final_status = r.json()["status"]
-    if final_status in ("shipped", "exception"):
+    if final_status in ("in_transit", "exception"):
         break
     time.sleep(1)
-report("4.1  Pipeline finished", final_status in ("shipped", "exception"), f"status={final_status}")
+report("4.1  Pipeline finished", final_status in ("in_transit", "exception"), f"status={final_status}")
 
 ext_id = f"KSQL-TEST-{TS}"
 
@@ -198,7 +202,7 @@ rows = ksql_query(
 )
 report("4.4  Order in ORDER_ALLOCATED", len(rows) >= 1, f"{len(rows)} row(s)")
 
-if final_status == "shipped":
+if final_status == "in_transit":
     print("  Querying SHIPMENT_CREATED stream...")
     rows = ksql_query(
         "SELECT ORDER_ID, SHIPMENT_ID, CARRIER, TRACKING_NUMBER "
@@ -262,10 +266,13 @@ print(f"\n  Submitting 3 orders on '{batch_channel}' channel...")
 for i in range(3):
     payload = {
         "external_order_id": f"KSQL-BATCH-{TS}-{i}",
-        "channel": batch_channel,
+        "source": batch_channel,
+        "customer_category": "b2c",
         "customer_name": f"Batch KSQL User {i}",
         "shipping_address": f"{i}00 Batch Blvd",
-        "items": [{"sku": f"KB-{i}", "product_name": f"Batch Item {i}", "quantity": 1, "unit_price": 15.00}],
+        "destination": "Batch Blvd",
+        "req_delivery_date": date.today().isoformat(),
+        "items": [{"sku": f"KB-{i}", "product_name": f"Batch Item {i}", "quantity": 1, "unit_price": 15.00, "weight_per_unit_kg": 1.0}],
     }
     r = httpx.post(f"{API_BASE}/orders/import", json=payload)
     print(f"       Order {i}: {r.json()['id']}  ({r.status_code})")

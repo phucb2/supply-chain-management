@@ -29,7 +29,7 @@ for TOPIC in "${TOPICS[@]}"; do
   kafka-topics --bootstrap-server "$BROKER" \
     --create --if-not-exists \
     --topic "$TOPIC" \
-    --partitions 4 \
+    --partitions 1 \
     --replication-factor 1
 done
 

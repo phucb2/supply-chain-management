@@ -24,11 +24,11 @@ class OrderAllocated(faust.Record):
 
 class ShipmentRequested(faust.Record):
     order_id: str
-    shipment_id: str
+    delivery_order_id: str
 
 
 class ShipmentStatusUpdated(faust.Record):
-    shipment_id: str
+    delivery_order_id: str
     order_id: str
     status: str
     location: str | None = None
@@ -43,13 +43,13 @@ class OrderException(faust.Record):
 
 class ShipmentCreated(faust.Record):
     order_id: str
-    shipment_id: str
+    delivery_order_id: str
     carrier: str
     tracking_number: str
 
 
 class EtaPredicted(faust.Record):
-    shipment_id: str
+    delivery_order_id: str
     predicted_eta_hours: float
     model_version: str
     predicted_at: str

@@ -14,14 +14,14 @@ st.header("Explorer — Shipments")
 
 tab_lookup, tab_update = st.tabs(["Lookup & Tracking", "Push Status Update"])
 
-SHIPMENT_PIPELINE = ["requested", "created", "picked_up", "in_transit", "out_for_delivery", "delivered"]
+SHIPMENT_PIPELINE = ["planned", "assigned", "in_transit", "delivered", "failed"]
 
 # ── Lookup ────────────────────────────────────────────────────────────────────
 
 with tab_lookup:
     st.subheader("Shipment Lookup")
 
-    sid = st.text_input("Shipment ID (UUID)", key="shipment_lookup_id")
+    sid = st.text_input("Delivery Order ID (UUID)", key="shipment_lookup_id")
 
     if sid:
         code, body = api.get_shipment(base, sid.strip())
@@ -37,12 +37,10 @@ with tab_lookup:
             st.progress(pct, text=f"Status: **{current}**")
 
             c1, c2 = st.columns(2)
-            c1.markdown(f"**Shipment ID:** `{body['id']}`")
-            c1.markdown(f"**Order ID:** `{body['order_id']}`")
-            c1.markdown(f"**Carrier:** {body.get('carrier') or '---'}")
-            c2.markdown(f"**Tracking #:** {body.get('tracking_number') or '---'}")
-            c2.markdown(f"**Created:** {body['created_at'][:19]}")
-            c2.markdown(f"**Updated:** {body['updated_at'][:19]}")
+            c1.markdown(f"**Delivery Order ID:** `{body['delivery_order_id']}`")
+            c1.markdown(f"**Request ID:** `{body['request_id']}`")
+            c2.markdown(f"**Status:** {body['status']}")
+            c2.markdown(f"**Delivery Date:** {body.get('delivery_date') or '---'}")
 
             with st.expander("Raw JSON"):
                 st.json(body)
@@ -86,8 +84,8 @@ with tab_update:
     st.caption("Simulate a driver or warehouse pushing a status update.")
 
     with st.form("push_status_form"):
-        ship_id = st.text_input("Shipment ID")
-        new_status = st.selectbox("New Status", SHIPMENT_PIPELINE[2:])  # skip requested/created
+        ship_id = st.text_input("Delivery Order ID")
+        new_status = st.selectbox("New Status", ["picked_up", "in_transit", "out_for_delivery", "delivered", "exception"])
         location = st.text_input("Location (optional)", value="")
 
         pushed = st.form_submit_button("Push Status", type="primary", use_container_width=True)

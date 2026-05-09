@@ -1,4 +1,4 @@
-"""Shipment endpoints — get, tracking, status update."""
+"""Delivery order endpoints — read and status tracking."""
 
 from datetime import datetime, timezone
 from uuid import UUID
@@ -7,7 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.repository import get_shipment, get_shipment_tracking_events
+from app.db.repository import get_sale_order_id_for_delivery, get_shipment, get_shipment_tracking_events
 from app.db.session import get_session
 from app.kafka.producer import publish_event
 from app.models.schemas import ShipmentResponse, TrackingEvent
@@ -36,9 +36,9 @@ async def get_tracking(shipment_id: UUID, session: AsyncSession = Depends(get_se
     events = await get_shipment_tracking_events(session, shipment_id)
     return [
         {
-            "event_type": e.event_type,
-            "payload": e.payload,
-            "created_at": e.created_at.isoformat(),
+            "event_type": f"order.{e.status}",
+            "payload": {"remarks": e.remarks},
+            "created_at": e.status_timestamp.isoformat(),
         }
         for e in events
     ]
@@ -55,13 +55,17 @@ async def update_status(
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
 
+    sale_order_id = await get_sale_order_id_for_delivery(session, shipment_id)
+    if not sale_order_id:
+        raise HTTPException(status_code=500, detail="No sale order linked to this delivery")
+
     publish_event(
         topic="shipment.status-updated",
         key=str(shipment_id),
         value={
-            "shipment_id": str(shipment_id),
-            "order_id": str(shipment.order_id),
-            "status": body.status.value,
+            "delivery_order_id": str(shipment_id),
+            "order_id": str(sale_order_id),
+            "status": body.status,
             "location": body.location,
             "timestamp": (body.timestamp or datetime.now(timezone.utc)).isoformat(),
         },

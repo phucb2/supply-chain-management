@@ -11,6 +11,7 @@ Or use the convenience script:
 """
 
 import asyncio
+from datetime import date
 import time
 
 import httpx
@@ -20,12 +21,15 @@ API_BASE = "http://localhost:8000"
 
 SAMPLE_ORDER = {
     "external_order_id": f"E2E-{int(time.time())}",
-    "channel": "integration-test",
+    "source": "integration-test",
+    "customer_category": "b2c",
     "customer_name": "E2E Tester",
     "customer_email": "e2e@test.local",
     "shipping_address": "456 Integration Ave, TestCity",
+    "destination": "TestCity",
+    "req_delivery_date": date.today().isoformat(),
     "items": [
-        {"sku": "TEST-SKU-1", "product_name": "Test Widget", "quantity": 3, "unit_price": 12.50},
+        {"sku": "TEST-SKU-1", "product_name": "Test Widget", "quantity": 3, "unit_price": 12.50, "weight_per_unit_kg": 1.0},
     ],
 }
 
@@ -56,12 +60,12 @@ class TestE2EHappyPath:
         resp = api.post("/orders/import", json=SAMPLE_ORDER)
         assert resp.status_code == 201
         order = resp.json()
-        order_id = order["id"]
-        assert order["status"] == "received"
+        order_id = order["sale_order_id"]
+        assert order["status"] == "pending"
 
         # 2. Wait for pipeline to process through to shipped
-        shipped_order = _poll_order_status(api, order_id, "shipped", max_wait=60)
-        assert shipped_order["status"] == "shipped"
+        shipped_order = _poll_order_status(api, order_id, "in_transit", max_wait=60)
+        assert shipped_order["status"] == "in_transit"
 
         # 3. Get order and find shipment (via list or events)
         resp = api.get(f"/orders/{order_id}")
@@ -88,7 +92,7 @@ class TestCancellation:
         cancel_order = {**SAMPLE_ORDER, "external_order_id": f"CANCEL-{int(time.time())}"}
         resp = api.post("/orders/import", json=cancel_order)
         assert resp.status_code == 201
-        order_id = resp.json()["id"]
+        order_id = resp.json()["sale_order_id"]
 
         cancel_resp = api.post(f"/orders/{order_id}/cancel")
         assert cancel_resp.status_code == 200

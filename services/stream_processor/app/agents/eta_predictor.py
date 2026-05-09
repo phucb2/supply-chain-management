@@ -43,21 +43,31 @@ async def _load_model():
         _model = None
 
 
-def _build_features(shipment, order) -> dict:
-    """Build the feature dict from DB objects for model inference."""
+def _build_features(shipment, order, *, carrier_feature: str) -> dict:
+    """Build the feature dict from DB objects for model inference.
+
+    Training maps shipment_requests.request_type -> column \"carrier\" and sale_orders.source -> \"channel\".
+    """
     item_count = len(order.items) if order and order.items else 0
     total_weight = sum(
-        (p.weight or 0.0) for p in (shipment.packages or [])
+        (item.total_kg or 0.0) for item in (order.items or [])
     )
-    created = shipment.created_at or datetime.now(timezone.utc)
+    if order and getattr(order, "created_at", None):
+        created = order.created_at
+    elif shipment and getattr(shipment, "created_at", None):
+        created = shipment.created_at
+    else:
+        created = datetime.now(timezone.utc)
+    day_of_week = created.weekday()
+    hour_of_day = created.hour
 
     return {
-        "carrier": shipment.carrier or "unknown",
-        "channel": order.channel if order else "unknown",
+        "carrier": carrier_feature or "unknown",
+        "channel": order.source if order else "unknown",
         "item_count": item_count,
         "total_weight_kg": total_weight,
-        "day_of_week": created.weekday(),
-        "hour_of_day": created.hour,
+        "day_of_week": day_of_week,
+        "hour_of_day": hour_of_day,
     }
 
 
@@ -87,7 +97,7 @@ def _predict(features: dict) -> float:
 @app.agent(shipment_created_topic)
 async def predict_eta(stream):
     async for event in stream:
-        shipment_id = event.shipment_id
+        shipment_id = event.delivery_order_id
 
         with tracer.start_as_current_span(
             "ml.predict_eta", attributes={"shipment.id": shipment_id},
@@ -99,12 +109,12 @@ async def predict_eta(stream):
             try:
                 from app.db import get_shipment_with_order, save_prediction
 
-                shipment, order = await get_shipment_with_order(uuid.UUID(shipment_id))
+                shipment, order, carrier_feature = await get_shipment_with_order(uuid.UUID(shipment_id))
                 if shipment is None:
                     logger.error("shipment_not_found_for_eta", shipment_id=shipment_id)
                     continue
 
-                features = _build_features(shipment, order)
+                features = _build_features(shipment, order, carrier_feature=carrier_feature)
 
                 start = time.monotonic()
                 predicted_eta = _predict(features)
@@ -115,7 +125,7 @@ async def predict_eta(stream):
 
                 now = datetime.now(timezone.utc)
                 await save_prediction(
-                    shipment_id=shipment.id,
+                    shipment_id=shipment.delivery_order_id,
                     predicted_eta_hours=predicted_eta,
                     model_version=_model_version,
                     input_features=features,
@@ -123,6 +133,7 @@ async def predict_eta(stream):
 
                 await eta_predicted_topic.send(value={
                     "shipment_id": shipment_id,
+                    "delivery_order_id": shipment_id,
                     "predicted_eta_hours": predicted_eta,
                     "model_version": _model_version,
                     "predicted_at": now.isoformat(),

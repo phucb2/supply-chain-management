@@ -17,7 +17,10 @@ services:
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: 1
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       CLUSTER_ID: "q1Sh-9_ISia_zwGINzRvyQ"
@@ -26,35 +29,36 @@ services:
     healthcheck:
       test: kafka-broker-api-versions --bootstrap-server localhost:9092
       interval: 10s
-      timeout: 5s
-      retries: 5
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    healthcheck:
-      test: rabbitmq-diagnostics -q ping
-      interval: 10s
-      timeout: 5s
+      timeout: 15s
       retries: 10
+      start_period: 90s
 
-  mqtt:
-    image: emqx/emqx:5.8.3
-    container_name: mqtt
-    ports:
-      - "1883:1883"
-      - "18083:18083"
-    healthcheck:
-      test: emqx ctl status
-      interval: 10s
-      timeout: 5s
-      retries: 10
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   container_name: rabbitmq
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: guest
+  #     RABBITMQ_DEFAULT_PASS: guest
+  #   healthcheck:
+  #     test: rabbitmq-diagnostics -q ping
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+
+  # mqtt:
+  #   image: emqx/emqx:5.8.3
+  #   container_name: mqtt
+  #   ports:
+  #     - "1883:1883"
+  #     - "18083:18083"
+  #   healthcheck:
+  #     test: emqx ctl status
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
 
   kafka-init:
     image: confluentinc/cp-kafka:7.7.1
@@ -83,8 +87,9 @@ services:
     healthcheck:
       test: curl -sf http://localhost:8088/info || exit 1
       interval: 10s
-      timeout: 5s
-      retries: 10
+      timeout: 15s
+      retries: 20
+      start_period: 120s
 
   ksqldb-cli:
     image: confluentinc/cp-ksqldb-cli:7.7.1
@@ -120,6 +125,11 @@ services:
       CONFIG_STORAGE_TOPIC: debezium_connect_configs
       OFFSET_STORAGE_TOPIC: debezium_connect_offsets
       STATUS_STORAGE_TOPIC: debezium_connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_PARTITIONS: 1
+      STATUS_STORAGE_PARTITIONS: 1
       KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       KEY_CONVERTER_SCHEMAS_ENABLE: "false"
@@ -172,9 +182,10 @@ services:
       - ./infra/postgres/03-debezium-publication.sql:/docker-entrypoint-initdb.d/03-debezium-publication.sql
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER:-supplychain}
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      interval: 10s
+      timeout: 60s
+      retries: 10
+      start_period: 60s
 
   minio:
     image: minio/minio:latest
@@ -192,7 +203,8 @@ services:
       test: mc ready local
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   minio-init:
     image: minio/mc:latest
@@ -221,8 +233,9 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 20s
+      retries: 15
+      start_period: 420s
 
   mlflow-init:
     image: ghcr.io/mlflow/mlflow:v2.18.0
@@ -232,7 +245,7 @@ services:
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
       AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin_secret}
-    command: ["bash", "-c", "pip install --quiet lightgbm boto3 && python /tmp/init-mlflow-model.py"]
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq libgomp1 && pip install --quiet lightgbm boto3 && python /tmp/init-mlflow-model.py"]
     volumes:
       - ./scripts/init-mlflow-model.py:/tmp/init-mlflow-model.py
       - ./infra/mlflow/default-model:/tmp/default-model

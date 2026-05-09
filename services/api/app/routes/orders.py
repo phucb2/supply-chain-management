@@ -1,4 +1,4 @@
-"""Order endpoints — import, read, list, cancel."""
+"""Sale order endpoints for redesigned data model."""
 
 from uuid import UUID
 
@@ -26,43 +26,47 @@ router = APIRouter()
 
 @router.post("/import", response_model=OrderResponse, status_code=201)
 async def import_order(body: OrderCreate, session: AsyncSession = Depends(get_session)):
-    """Ingest order from eCommerce/ERP channel."""
+    """Ingest sale order from channel into redesigned schema."""
     order, created = await create_order(
         session,
         external_order_id=body.external_order_id,
-        channel=body.channel,
-        customer_name=body.customer_name,
+        source=body.source,
+        customer_category=body.customer_category.value,
+        customer_name=body.customer_name,  # used for B2C recipient fields
         customer_email=body.customer_email,
         shipping_address=body.shipping_address,
-        raw_payload=body.model_dump(mode="json"),
+        req_delivery_date=body.req_delivery_date,
+        request_type=body.request_type.value,
+        origin=body.origin,
+        destination=body.destination,
         items=[item.model_dump() for item in body.items],
     )
 
     if not created:
         raise HTTPException(status_code=409, detail="Duplicate order: external_order_id already exists")
 
-    await create_order_event(session, order.id, "order.received", {"channel": body.channel})
+    await create_order_event(session, order.sale_order_id, "order.received", {"source": body.source})
     await session.commit()
 
     publish_event(
         topic="order.received",
-        key=str(order.id),
+        key=str(order.sale_order_id),
         value={
-            "order_id": str(order.id),
+            "order_id": str(order.sale_order_id),
             "external_order_id": order.external_order_id,
-            "channel": order.channel,
-            "customer_name": order.customer_name,
-            "shipping_address": order.shipping_address,
+            "channel": order.source,
+            "customer_name": body.customer_name,
+            "shipping_address": body.shipping_address,
             "items": [item.model_dump() for item in body.items],
         },
     )
 
-    orders_received.add(1, {"channel": body.channel})
+    orders_received.add(1, {"channel": body.source})
 
     try:
-        upload_raw_payload(str(order.id), body.model_dump(mode="json"))
+        upload_raw_payload(str(order.sale_order_id), body.model_dump(mode="json"))
     except Exception:
-        logger.exception("minio_upload_failed", order_id=str(order.id))
+        logger.exception("minio_upload_failed", order_id=str(order.sale_order_id))
 
     return order
 
@@ -101,7 +105,7 @@ async def cancel_order(order_id: UUID, session: AsyncSession = Depends(get_sessi
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    non_cancellable = {OrderStatus.SHIPPED, OrderStatus.DELIVERED}
+    non_cancellable = {OrderStatus.IN_TRANSIT, OrderStatus.DELIVERED}
     if OrderStatus(order.status) in non_cancellable:
         raise HTTPException(status_code=409, detail=f"Cannot cancel order in '{order.status}' state")
 
@@ -110,8 +114,8 @@ async def cancel_order(order_id: UUID, session: AsyncSession = Depends(get_sessi
 
     publish_event(
         topic="order.cancelled",
-        key=str(order.id),
-        value={"order_id": str(order.id), "status": "cancelled"},
+        key=str(order.sale_order_id),
+        value={"order_id": str(order.sale_order_id), "status": "cancelled"},
     )
 
     return order

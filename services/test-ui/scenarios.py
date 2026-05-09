@@ -5,8 +5,8 @@ Mirrors scripts/simulate.py but structured as callable functions for the UI.
 
 from __future__ import annotations
 
+from datetime import date
 import time
-import uuid
 from dataclasses import dataclass, field
 
 import httpx
@@ -36,7 +36,7 @@ class ScenarioContext:
 SCENARIOS: dict[int, dict] = {
     1: {
         "title": "Happy-path order lifecycle",
-        "description": "Create an order and wait for the pipeline to move it to 'shipped'.",
+        "description": "Create an order and wait for the pipeline to move it to 'in_transit'.",
         "depends_on": [],
     },
     2: {
@@ -50,8 +50,8 @@ SCENARIOS: dict[int, dict] = {
         "depends_on": [],
     },
     4: {
-        "title": "Cannot cancel shipped order",
-        "description": "Attempt to cancel a shipped order and expect a 409 conflict.",
+        "title": "Cannot cancel in-transit order",
+        "description": "Attempt to cancel an in-transit order and expect a 409 conflict.",
         "depends_on": [1],
     },
     5: {
@@ -139,13 +139,16 @@ def _scenario_1(base: str, ctx: ScenarioContext, on_poll=None) -> list[TestResul
 
     payload = {
         "external_order_id": f"UI-HAPPY-{ctx.ts}",
-        "channel": "shopify",
+        "source": "shopify",
+        "customer_category": "b2c",
         "customer_name": "Happy Path User",
         "customer_email": "happy@test.com",
         "shipping_address": "1 Success Blvd, Testville",
+        "destination": "Testville",
+        "req_delivery_date": date.today().isoformat(),
         "items": [
-            {"sku": "WIDGET-A", "product_name": "Widget Alpha", "quantity": 2, "unit_price": 12.99},
-            {"sku": "WIDGET-B", "product_name": "Widget Beta", "quantity": 1, "unit_price": 24.50},
+            {"sku": "WIDGET-A", "product_name": "Widget Alpha", "quantity": 2, "unit_price": 12.99, "weight_per_unit_kg": 1.0},
+            {"sku": "WIDGET-B", "product_name": "Widget Beta", "quantity": 1, "unit_price": 24.50, "weight_per_unit_kg": 1.0},
         ],
     }
     ctx.happy_order_payload = payload
@@ -157,18 +160,19 @@ def _scenario_1(base: str, ctx: ScenarioContext, on_poll=None) -> list[TestResul
         return results
 
     order = r.json()
-    ctx.happy_order_id = order["id"]
-    results.append(TestResult("1.2 Order status is 'received'", order["status"] == "received", order["status"]))
+    ctx.happy_order_id = order["sale_order_id"]
+    ctx.happy_shipment_id = order["delivery_order_id"]
+    results.append(TestResult("1.2 Order status is 'pending'", order["status"] == "pending", order["status"]))
 
-    final = _poll_status(base, ctx.happy_order_id, "shipped", on_poll=on_poll)
-    results.append(TestResult("1.3 Pipeline completes to 'shipped'", final == "shipped", f"final={final}"))
+    final = _poll_status(base, ctx.happy_order_id, "in_transit", on_poll=on_poll)
+    results.append(TestResult("1.3 Pipeline completes to 'in_transit'", final == "in_transit", f"final={final}"))
 
     r = httpx.get(f"{base}/orders/{ctx.happy_order_id}", timeout=10)
     if r.status_code == 200:
         order_data = r.json()
         results.append(TestResult(
             "1.4 Order retrievable after pipeline",
-            order_data["status"] in ("shipped", "delivered"),
+            order_data["status"] in ("in_transit", "delivered"),
             f"status={order_data['status']}",
         ))
 
@@ -216,10 +220,13 @@ def _scenario_3(base: str, ctx: ScenarioContext, _on_poll=None) -> list[TestResu
 
     cancel_payload = {
         "external_order_id": f"UI-CANCEL-{ctx.ts}",
-        "channel": "manual",
+        "source": "manual",
+        "customer_category": "b2c",
         "customer_name": "Cancel Me",
         "shipping_address": "99 Void Lane",
-        "items": [{"sku": "CANCEL-1", "product_name": "Doomed Widget", "quantity": 1, "unit_price": 5.00}],
+        "destination": "Void Lane",
+        "req_delivery_date": date.today().isoformat(),
+        "items": [{"sku": "CANCEL-1", "product_name": "Doomed Widget", "quantity": 1, "unit_price": 5.00, "weight_per_unit_kg": 1.0}],
     }
 
     r = httpx.post(f"{base}/orders/import", json=cancel_payload, timeout=10)
@@ -227,7 +234,7 @@ def _scenario_3(base: str, ctx: ScenarioContext, _on_poll=None) -> list[TestResu
     if r.status_code != 201:
         return results
 
-    cancel_id = r.json()["id"]
+    cancel_id = r.json()["sale_order_id"]
     ctx.cancel_order_id = cancel_id
 
     r = httpx.post(f"{base}/orders/{cancel_id}/cancel", timeout=10)
@@ -455,23 +462,26 @@ def _scenario_10(base: str, ctx: ScenarioContext, on_poll=None) -> list[TestResu
     for i in range(5):
         payload = {
             "external_order_id": f"UI-BATCH-{ctx.ts}-{i}",
-            "channel": "batch-test",
+            "source": "batch-test",
+            "customer_category": "b2c",
             "customer_name": f"Batch User {i}",
             "shipping_address": f"{i}00 Batch Street",
-            "items": [{"sku": f"BATCH-{i}", "product_name": f"Batch Item {i}", "quantity": i + 1, "unit_price": 10.0}],
+            "destination": "Batch City",
+            "req_delivery_date": date.today().isoformat(),
+            "items": [{"sku": f"BATCH-{i}", "product_name": f"Batch Item {i}", "quantity": i + 1, "unit_price": 10.0, "weight_per_unit_kg": 1.0}],
         }
         r = httpx.post(f"{base}/orders/import", json=payload, timeout=10)
         if r.status_code == 201:
-            batch_ids.append(r.json()["id"])
+            batch_ids.append(r.json()["sale_order_id"])
 
     start = time.time()
     final_statuses = {}
     for oid in batch_ids:
-        st = _poll_status(base, oid, "shipped", max_wait=DEFAULT_TIMEOUT, on_poll=on_poll)
+        st = _poll_status(base, oid, "in_transit", max_wait=DEFAULT_TIMEOUT, on_poll=on_poll)
         final_statuses[oid] = st
     elapsed = time.time() - start
 
-    shipped = sum(1 for s in final_statuses.values() if s == "shipped")
+    shipped = sum(1 for s in final_statuses.values() if s == "in_transit")
     exceptions = sum(1 for s in final_statuses.values() if s == "exception")
 
     results.append(TestResult(

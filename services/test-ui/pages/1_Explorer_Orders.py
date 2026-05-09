@@ -2,6 +2,7 @@
 Orders — create, browse, inspect, and cancel orders.
 """
 
+from datetime import date
 import os
 import time
 
@@ -23,7 +24,7 @@ with tab_create:
     with st.form("create_order_form"):
         col1, col2 = st.columns(2)
         ext_id = col1.text_input("External Order ID", value=f"UI-{int(time.time())}")
-        channel = col2.selectbox("Channel", ["shopify", "amazon", "manual", "erp", "other"])
+        source = col2.selectbox("Source", ["shopify", "amazon", "manual", "erp", "other"])
 
         col3, col4 = st.columns(2)
         name = col3.text_input("Customer Name", value="")
@@ -42,7 +43,15 @@ with tab_create:
             prod = ic2.text_input("Product Name", key=f"prod_{i}", value=f"Product {i+1}")
             qty = ic3.number_input("Qty", key=f"qty_{i}", min_value=1, value=1)
             price = ic4.number_input("Price", key=f"price_{i}", min_value=0.0, value=10.0, step=0.5)
-            items.append({"sku": sku, "product_name": prod, "quantity": int(qty), "unit_price": float(price)})
+            items.append(
+                {
+                    "sku": sku,
+                    "product_name": prod,
+                    "quantity": int(qty),
+                    "unit_price": float(price),
+                    "weight_per_unit_kg": 1.0,
+                }
+            )
 
         submitted = st.form_submit_button("Submit Order", type="primary", use_container_width=True)
 
@@ -52,9 +61,12 @@ with tab_create:
         else:
             payload = {
                 "external_order_id": ext_id,
-                "channel": channel,
+                "source": source,
+                "customer_category": "b2c",
                 "customer_name": name,
                 "shipping_address": address,
+                "destination": address,
+                "req_delivery_date": date.today().isoformat(),
                 "items": items,
             }
             if email:
@@ -62,7 +74,7 @@ with tab_create:
 
             code, body = api.create_order(base, payload)
             if code == 201:
-                st.success(f"Order created — ID: `{body['id']}`  Status: **{body['status']}**")
+                st.success(f"Order created — ID: `{body['sale_order_id']}`  Status: **{body['status']}**")
                 with st.expander("Response"):
                     st.json(body)
             elif code == 409:
@@ -80,10 +92,10 @@ with tab_browse:
     fc1, fc2, fc3 = st.columns([2, 2, 1])
     f_status = fc1.selectbox(
         "Filter by status",
-        [None, "received", "validated", "erp_synced", "allocated", "shipped", "delivered", "cancelled", "exception"],
+        [None, "pending", "confirmed", "allocated", "packed", "in_transit", "delivered", "cancelled", "exception"],
         format_func=lambda x: "All statuses" if x is None else x,
     )
-    f_channel = fc2.text_input("Filter by channel", value="")
+    f_channel = fc2.text_input("Filter by source", value="")
     fc3.write("")  # spacer
     refresh = fc3.button("Refresh", key="refresh_orders", use_container_width=True)
 
@@ -108,16 +120,16 @@ with tab_browse:
                 with st.container(border=True):
                     r1, r2, r3, r4 = st.columns([3, 2, 2, 1])
                     r1.markdown(f"**{o['external_order_id']}**")
-                    r1.caption(f"`{o['id']}`")
+                    r1.caption(f"`{o['sale_order_id']}`")
                     r2.markdown(f":{color}[{o['status']}]")
-                    r2.caption(o["channel"])
-                    r3.markdown(o["customer_name"])
+                    r2.caption(o["source"])
+                    r3.markdown(f"Delivery `{o['delivery_order_id']}`")
                     r3.caption(o["created_at"][:19])
-                    if o["status"] not in ("shipped", "delivered", "cancelled"):
-                        if r4.button("Cancel", key=f"cancel_{o['id']}", use_container_width=True):
-                            cc, cb = api.cancel_order(base, o["id"])
+                    if o["status"] not in ("in_transit", "delivered", "cancelled"):
+                        if r4.button("Cancel", key=f"cancel_{o['sale_order_id']}", use_container_width=True):
+                            cc, cb = api.cancel_order(base, o["sale_order_id"])
                             if cc == 200:
-                                st.success(f"Cancelled {o['id']}")
+                                st.success(f"Cancelled {o['sale_order_id']}")
                                 st.rerun()
                             else:
                                 st.error(f"Cancel failed: {cb.get('detail', cc)}")
@@ -137,7 +149,7 @@ with tab_detail:
     if order_id:
         code, body = api.get_order(base, order_id.strip())
         if code == 200:
-            STATUS_PIPELINE = ["received", "validated", "erp_synced", "allocated", "shipped", "delivered"]
+            STATUS_PIPELINE = ["pending", "confirmed", "allocated", "packed", "in_transit", "delivered"]
 
             current = body["status"]
             if current in STATUS_PIPELINE:
@@ -150,13 +162,13 @@ with tab_detail:
 
             d1, d2 = st.columns(2)
             d1.markdown(f"**External ID:** {body['external_order_id']}")
-            d1.markdown(f"**Channel:** {body['channel']}")
-            d1.markdown(f"**Customer:** {body['customer_name']}")
-            d2.markdown(f"**Address:** {body['shipping_address']}")
+            d1.markdown(f"**Source:** {body['source']}")
+            d1.markdown(f"**Delivery Order ID:** {body['delivery_order_id']}")
+            d2.markdown(f"**Customer ID:** {body['customer_id']}")
             d2.markdown(f"**Created:** {body['created_at'][:19]}")
-            d2.markdown(f"**Updated:** {body['updated_at'][:19]}")
+            d2.markdown(f"**Requested Delivery:** {body['req_delivery_date']}")
 
-            if current not in ("shipped", "delivered", "cancelled"):
+            if current not in ("in_transit", "delivered", "cancelled"):
                 if st.button("Cancel This Order", type="secondary"):
                     cc, cb = api.cancel_order(base, order_id.strip())
                     if cc == 200:
@@ -175,7 +187,7 @@ with tab_detail:
                     _, fresh = api.get_order(base, order_id.strip())
                     if isinstance(fresh, dict):
                         placeholder.markdown(f"Status: **{fresh['status']}**  (updated {fresh['updated_at'][:19]})")
-                        if fresh["status"] in ("shipped", "delivered", "cancelled", "exception"):
+                        if fresh["status"] in ("in_transit", "delivered", "cancelled", "exception"):
                             break
                     time.sleep(2)
                 st.rerun()

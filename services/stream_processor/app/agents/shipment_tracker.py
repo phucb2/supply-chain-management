@@ -25,7 +25,7 @@ shipment_status_topic = app.topic("shipment.status-updated", value_type=Shipment
 @app.agent(shipment_status_topic)
 async def track_shipment(stream):
     async for event in stream:
-        shipment_id = event.shipment_id
+        shipment_id = event.delivery_order_id
         order_id = event.order_id
         new_status = event.status
 
@@ -59,7 +59,7 @@ async def track_shipment(stream):
                 await update_shipment_status(sid, new_status)
 
                 await create_order_event(oid, "shipment.status-updated", {
-                    "shipment_id": shipment_id,
+                    "delivery_order_id": shipment_id,
                     "status": new_status,
                     "location": event.location,
                     "timestamp": event.timestamp,
@@ -68,9 +68,9 @@ async def track_shipment(stream):
                 if new_status == "delivered":
                     await update_order_status(oid, "delivered")
                     await create_order_event(oid, "order.delivered", {
-                        "shipment_id": shipment_id,
+                        "delivery_order_id": shipment_id,
                     })
-                    shipments_delivered.add(1, {"carrier": shipment.carrier or "unknown"})
+                    shipments_delivered.add(1, {"carrier": "unknown"})
                     orders_delivered.add(1)
                     logger.info("order_delivered", order_id=order_id, shipment_id=shipment_id)
 
@@ -78,7 +78,7 @@ async def track_shipment(stream):
 
                 elif new_status == "exception":
                     await update_order_status(oid, "exception")
-                    shipments_exception.add(1, {"carrier": shipment.carrier or "unknown"})
+                    shipments_exception.add(1, {"carrier": "unknown"})
                     orders_exception.add(1)
                     logger.warning("shipment_exception", order_id=order_id, shipment_id=shipment_id)
 
@@ -111,7 +111,8 @@ async def _record_prediction_actual(shipment_id: uuid.UUID, shipment) -> None:
             logger.debug("no_prediction_for_shipment", shipment_id=str(shipment_id))
             return
 
-        actual_eta_hours = (delivered_at - shipment.created_at).total_seconds() / 3600
+        created_at = shipment.created_at or delivered_at
+        actual_eta_hours = (delivered_at - created_at).total_seconds() / 3600
         absolute_err = abs(prediction.predicted_eta_hours - actual_eta_hours)
 
         await save_prediction_actual(

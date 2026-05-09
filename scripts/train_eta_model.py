@@ -28,21 +28,28 @@ MODEL_NAME = "eta-model"
 CATEGORICAL_FEATURES = ["carrier", "channel"]
 
 FEATURE_QUERY = text("""
+    WITH delivered_status AS (
+        SELECT
+            sos.sale_order_id,
+            MAX(sos.status_timestamp) AS delivered_at
+        FROM sale_order_status sos
+        WHERE sos.status = 'delivered'
+        GROUP BY sos.sale_order_id
+    )
     SELECT
-        s.id            AS shipment_id,
-        s.carrier,
-        o.channel,
-        s.created_at    AS ship_created_at,
-        s.delivered_at,
-        COUNT(oi.id)    AS item_count,
-        COALESCE(SUM(sp.weight), 0) AS total_weight_kg
-    FROM shipments s
-    JOIN orders o       ON o.id = s.order_id
-    LEFT JOIN order_items oi ON oi.order_id = o.id
-    LEFT JOIN shipment_packages sp ON sp.shipment_id = s.id
-    WHERE s.status = 'delivered'
-      AND s.delivered_at IS NOT NULL
-    GROUP BY s.id, s.carrier, o.channel, s.created_at, s.delivered_at
+        so.sale_order_id AS shipment_id,
+        sr.request_type AS carrier,
+        so.source AS channel,
+        so.created_at AS ship_created_at,
+        ds.delivered_at,
+        COALESCE(SUM(oi.quantity), 0) AS item_count,
+        COALESCE(SUM(oi.total_kg), 0) AS total_weight_kg
+    FROM sale_orders so
+    JOIN delivery_orders doo ON doo.delivery_order_id = so.delivery_order_id
+    JOIN shipment_requests sr ON sr.request_id = doo.request_id
+    JOIN delivered_status ds ON ds.sale_order_id = so.sale_order_id
+    LEFT JOIN order_items oi ON oi.sale_order_id = so.sale_order_id
+    GROUP BY so.sale_order_id, sr.request_type, so.source, so.created_at, ds.delivered_at
 """)
 
 

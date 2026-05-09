@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import InventoryReservation
+from app.db.models import OrderItem, Product
 from app.db.repository import create_driver, soft_delete_driver
 from app.db.session import get_session
 from app.kafka.producer import publish_event
@@ -42,13 +42,14 @@ async def record_goods_out(body: GoodsMovement, session: AsyncSession = Depends(
 
 @router.get("/inventory")
 async def list_inventory(session: AsyncSession = Depends(get_session)):
-    """List current inventory levels (aggregated from order reservations)."""
+    """List projected inventory demand by SKU from order items."""
     stmt = (
         select(
-            InventoryReservation.sku,
-            func.sum(InventoryReservation.quantity).label("total_quantity"),
+            Product.sku,
+            func.sum(OrderItem.quantity).label("total_quantity"),
         )
-        .group_by(InventoryReservation.sku)
+        .join(Product, Product.product_id == OrderItem.product_id)
+        .group_by(Product.sku)
     )
     result = await session.execute(stmt)
     return [{"sku": row.sku, "quantity": row.total_quantity} for row in result.all()]
@@ -59,13 +60,13 @@ async def add_driver(body: DriverCreate, session: AsyncSession = Depends(get_ses
     """Register a new driver or vendor."""
     driver = await create_driver(
         session,
-        name=body.name,
+        full_name=body.full_name,
+        license_number=body.license_number,
         phone=body.phone,
-        vendor=body.vendor,
-        vehicle_plate=body.vehicle_plate,
+        vendor_id=body.vendor_id,
     )
     await session.commit()
-    return {"id": str(driver.id), "name": driver.name}
+    return {"id": str(driver.driver_id), "name": driver.full_name}
 
 
 @router.delete("/drivers/{driver_id}")

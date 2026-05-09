@@ -69,7 +69,7 @@ CREATE STREAM IF NOT EXISTS order_cancelled (
 
 CREATE STREAM IF NOT EXISTS shipment_created (
     order_id        VARCHAR KEY,
-    shipment_id     VARCHAR,
+    delivery_order_id VARCHAR,
     carrier         VARCHAR,
     tracking_number VARCHAR
 ) WITH (
@@ -78,7 +78,7 @@ CREATE STREAM IF NOT EXISTS shipment_created (
 );
 
 CREATE STREAM IF NOT EXISTS shipment_status_updated (
-    shipment_id VARCHAR KEY,
+    delivery_order_id VARCHAR KEY,
     order_id    VARCHAR,
     status      VARCHAR,
     location    VARCHAR,
